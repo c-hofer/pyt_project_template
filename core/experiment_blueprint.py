@@ -22,8 +22,7 @@ class Blueprint(ExperimentBase):
             'lr_init': float,
             'weight_decay': float,
             'ds_train': str, 
-            'ds_test': str, 
-            'eval_epoch': int
+            'ds_test': str
         }
     )
 
@@ -98,23 +97,19 @@ class Blueprint(ExperimentBase):
         self.batch_loss = l
 
     def evaluate(self):
-        
-        if self.epoch_i % self.args['eval_epoch'] == 0 \
-            or \
-            self.epoch_i == self.args['num_epochs'] - 1 :
             
-            self.model.eval()
-        
-            X, Y = apply_model(self.model, self.ds_train, device=self.device)
-            mb_comment = ''
+        self.model.eval()
+    
+        X, Y = apply_model(self.model, self.ds_train, device=self.device)
+        mb_comment = ''
 
-            acc_train = argmax_and_accuracy(X, Y)
-            self.logger.log_value('acc_train', acc_train)
-            mb_comment += " | acc. train {:.2f} ".format(acc_train)
+        acc_train = argmax_and_accuracy(X, Y)
+        self.logger.log_value('acc_train', acc_train)
+        mb_comment += " | acc. train {:.2f} ".format(acc_train)
 
-            X, Y = apply_model(self.model, self.ds_test, device=self.device)
-            acc_test = argmax_and_accuracy(X, Y)
-            self.logger.log_value('acc_test', acc_test)
-            mb_comment += " | acc. test {:.2f} ".format(acc_test)
+        X, Y = apply_model(self.model, self.ds_test, device=self.device)
+        acc_test = argmax_and_accuracy(X, Y)
+        self.logger.log_value('acc_test', acc_test)
+        mb_comment += " | acc. test {:.2f} ".format(acc_test)
 
-            self.mb.main_bar.comment = mb_comment
+        self.mb.main_bar.comment = mb_comment

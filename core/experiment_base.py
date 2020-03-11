@@ -17,22 +17,30 @@ class ExperimentBase(object):
 
     args = {
         'output_root_dir': str,
-        'num_runs': int,
         'num_epochs': int,
-        'tag': str
+        'tag': str,
+        'eval_epoch': int
     }
 
-    def check_args(self):
-        for k, v in self.args.items():
-            if isinstance(v, type):
-                assert isinstance(k, v)
-            elif hasattr(v, '__call__'):
-                assert v(k)
+    def check_args(self, args):
+        assert 'experiment_type' not in args
 
+        for k, v in args.items():
+            assert k in self.args, "Unknown keword argument {}".format(k)
+
+            check = self.args[k]
+            if isinstance(check, type):
+                assert isinstance(v, check), "{} (={}) is not {}".format(k, v, check)
+            elif hasattr(check, '__call__'):
+                assert check(v), "{} (={}) failed to fulfill {}".format(k, v, check)
 
     def __init__(self, **kwargs):
-        self.args = kwargs 
-        self.check_args()
+        self.check_args(kwargs)
+        self.args = kwargs
+
+        self.args['experiment_type'] = \
+            '.'.join([self.__module__, type(self).__qualname__])
+
         self.device = 'cuda'
 
         output_dir = Path(
@@ -40,7 +48,7 @@ class ExperimentBase(object):
         output_dir.mkdir()
 
         self.logger = logging.Logger(output_dir, self.args)
-        
+
         self.ds_train = None
         self.ds_test = None
         self.model = None
@@ -52,7 +60,6 @@ class ExperimentBase(object):
         self.batch_y = None
         self.epoch_i = None
         self.batch_loss = None
-
 
     def one_run(self):
         self.logger.new_run()
@@ -82,7 +89,7 @@ class ExperimentBase(object):
                 if isinstance(self.opt, list):
                     for o in self.opt:
                         o.zero_grad()
-                else: 
+                else:
                     self.opt.zero_grad()
 
                 self.batch_loss.backward()
@@ -93,6 +100,8 @@ class ExperimentBase(object):
                 else:
                     self.opt.step()
 
+                self.post_batch()
+
             if self.scheduler is not None:
                 if isinstance(self.scheduler, list):
                     for s in self.scheduler:
@@ -100,11 +109,15 @@ class ExperimentBase(object):
                 else:
                     self.scheduler.step()
 
-            self.evaluate()
+            if (self.epoch_i + 1) % self.args['eval_epoch'] == 0 \
+                    or \
+                    self.epoch_i == self.args['num_epochs'] - 1:
+
+                self.evaluate()
+
             self.logger.write_logged_values_to_disk()
 
         self.logger.write_model_to_disk('model', self.model)
-
 
     def __call__(self):
         try:
@@ -112,8 +125,10 @@ class ExperimentBase(object):
                 self.one_run()
 
         except Exception as ex:
-            self.error = ex 
+            self.error = ex
             self.handle_error()
+
+    # necessary hooks
 
     def ds_setup_iter(self):
         raise NotImplementedError()
@@ -140,12 +155,18 @@ class ExperimentBase(object):
         raise NotImplementedError()
 
     def handle_error(self):
-        raise self.error 
+        raise self.error
+
+    # optional hooks
+
+    def post_batch(self):
+        pass
+
+    # class methods
 
     @classmethod
     def args_template(cls):
         s = " : , \n    "
         s = s.join([r"'{}'".format(k) for k in cls.args.keys()])
-        s = "{ \n    " + s +"\n}"
+        s = "{ \n    " + s + "\n}"
         return s
-
